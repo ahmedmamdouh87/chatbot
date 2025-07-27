@@ -10,7 +10,7 @@ load_dotenv()
 app = Flask(__name__)
 
 VERIFY_TOKEN = os.environ.get("FB_VERIFY_TOKEN", "test123")
-PAGE_ACCESS_TOKEN = os.environ.get("EAAKW1GYXQ0IBPHZAK2Sr4npmEEGO2qcwgaFyjVaMxs49jdoBX8btrQjE8L6hnzEIhK9kOZAdDDZAoLVBy6NFLyIYaHIrvkd2ZA2bCzszRRzGA1sGudbdxwFr9tF6oy0GZAtEuDT2hmlp5GsH7EkagJhwVQZBKAIiiQKdvOvNdOXZCAQrZA80uDyVpmZBPET82kY8trrZC0csnrZBgZDZD")
+PAGE_ACCESS_TOKEN = os.environ.get("FB_PAGE_TOKEN")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
 openai.api_key = OPENAI_API_KEY
