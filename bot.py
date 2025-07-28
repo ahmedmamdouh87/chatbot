@@ -1,48 +1,71 @@
-from flask import Flask, request, jsonify
-import openai
+from flask import Flask, request
+import requests
 import os
+from dotenv import load_dotenv
+import openai
+import traceback
+
+# Load environment variables
+load_dotenv()
 
 app = Flask(__name__)
 
-# === Load OpenAI API key from environment ===
-openai.api_key = os.getenv("OPENAI_API_KEY")
-MODEL = "gpt-3.5-turbo"  # Change to "gpt-4" if needed and supported
+VERIFY_TOKEN = os.environ.get("FB_VERIFY_TOKEN", "test123")
+PAGE_ACCESS_TOKEN = os.environ.get("FB_PAGE_ACCESS_TOKEN")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
-# === Routes ===
-@app.route("/", methods=["GET"])
-def index():
-    return "Chatbot is live using OpenAI ChatGPT!"
+openai.api_key = OPENAI_API_KEY
 
-@app.route("/webhook", methods=["POST"])
+# Facebook webhook verification
+@app.route('/webhook', methods=['GET'])
+def verify():
+    if request.args.get('hub.verify_token') == VERIFY_TOKEN:
+        return request.args.get('hub.challenge')
+    return 'Invalid verification token', 403
+
+# Facebook message handling
+@app.route('/webhook', methods=['POST'])
 def webhook():
-    try:
-        data = request.get_json()
-        user_message = data.get("message", "")
-        if not user_message:
-            return jsonify({"error": "No message provided"}), 400
+    data = request.get_json()
+    if data.get('object') == 'page':
+        for entry in data['entry']:
+            for event in entry.get('messaging', []):
+                sender_id = event['sender']['id']
+                if 'message' in event and 'text' in event['message']:
+                    user_message = event['message']['text']
+                    gpt_reply = get_gpt_reply(user_message)
+                    send_message(sender_id, gpt_reply)
+    return "ok", 200
 
-        # Send message to OpenAI Chat API
+# Function to call OpenAI ChatGPT
+def get_gpt_reply(user_message):
+    try:
         response = openai.ChatCompletion.create(
-            model=MODEL,
+            model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "You are a helpful assistant."},
                 {"role": "user", "content": user_message}
-            ],
-            temperature=0.7
+            ]
         )
-
-        reply = response.choices[0].message.content
-        return jsonify({"reply": reply})
-
-    except openai.error.RateLimitError:
-        return jsonify({"error": "Rate limit exceeded. Check your usage and plan."}), 429
-    except openai.error.AuthenticationError:
-        return jsonify({"error": "Authentication failed. Check your API key."}), 401
+        return response.choices[0].message['content'].strip()
     except Exception as e:
-        print("Unhandled error:", e)
-        return jsonify({"error": "Something went wrong"}), 500
+        print("GPT error:", e)
+        traceback.print_exc()
+        return "Sorry, something went wrong."
 
-# === Run the app ===
-if __name__ == "__main__":
-    print("OpenAI API key loaded:", bool(openai.api_key))
-    app.run(host="0.0.0.0", port=10000)
+# Function to send message back to Facebook user
+def send_message(recipient_id, text):
+    url = 'https://graph.facebook.com/v17.0/me/messages'
+    params = {'access_token': PAGE_ACCESS_TOKEN}
+    headers = {'Content-Type': 'application/json'}
+    data = {
+        'recipient': {'id': recipient_id},
+        'message': {'text': text}
+    }
+    resp = requests.post(url, params=params, headers=headers, json=data)
+    if resp.status_code != 200:
+        print("FB send_message error:", resp.text)
+
+# Render or local dev
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
