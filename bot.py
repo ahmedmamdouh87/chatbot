@@ -15,6 +15,7 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
 # Set OpenAI API key
 openai.api_key = OPENAI_API_KEY
+print("API Key Exists:", openai.api_key is not None)
 
 # Facebook webhook verification
 @app.route('/webhook', methods=['GET'])
