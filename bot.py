@@ -10,7 +10,7 @@ load_dotenv()
 app = Flask(__name__)
 
 VERIFY_TOKEN = os.environ.get("FB_VERIFY_TOKEN", "test123")
-PAGE_ACCESS_TOKEN = os.environ.get("PAGE_ACCESS_TOKEN")
+PAGE_ACCESS_TOKEN = os.environ.get("FB_PAGE_TOKEN")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
 # Set OpenAI API key
