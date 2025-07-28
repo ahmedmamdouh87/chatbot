@@ -26,13 +26,11 @@ def get_chatgpt_response(user_message):
             model="gpt-3.5-turbo",
             messages=[{"role": "user", "content": user_message}]
         )
-        print("=== OpenAI Response ===")
-        print(response)
-
         reply = response['choices'][0]['message']['content']
-        return reply.strip()
+        print("OpenAI Reply:", reply)
+        return reply
     except Exception as e:
-        print("OpenAI Error:", e)
+        print("OpenAI API call failed:", e)
         return "Something went wrong while talking to ChatGPT."
 
 
