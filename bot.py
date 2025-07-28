@@ -4,24 +4,25 @@ import os
 from dotenv import load_dotenv
 from openai import OpenAI
 
-# === Load environment variables ===
+# Load environment variables
 load_dotenv()
 
 app = Flask(__name__)
 
-# === Configuration ===
-VERIFY_TOKEN = os.environ.get("FB_VERIFY_TOKEN", "test123")
-PAGE_ACCESS_TOKEN = os.environ.get("PAGE_ACCESS_TOKEN")
-client = OpenAI()  # Uses OPENAI_API_KEY from environment
+VERIFY_TOKEN = os.getenv("FB_VERIFY_TOKEN", "test123")
+PAGE_ACCESS_TOKEN = os.getenv("FB_PAGE_ACCESS_TOKEN")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-# === Facebook webhook verification ===
+client = OpenAI(api_key=OPENAI_API_KEY)
+
+# === Facebook Webhook Verification ===
 @app.route('/webhook', methods=['GET'])
 def verify():
     if request.args.get('hub.verify_token') == VERIFY_TOKEN:
         return request.args.get('hub.challenge')
     return 'Invalid verification token', 403
 
-# === Facebook message handling ===
+# === Webhook Handler ===
 @app.route('/webhook', methods=['POST'])
 def webhook():
     data = request.get_json()
@@ -36,7 +37,7 @@ def webhook():
                     send_message(sender_id, gpt_reply)
     return "ok", 200
 
-# === Get reply from OpenAI ChatGPT ===
+# === Get ChatGPT Response ===
 def get_gpt_reply(user_message):
     try:
         response = client.chat.completions.create(
@@ -48,10 +49,10 @@ def get_gpt_reply(user_message):
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
-        print("GPT error:", e)
+        print("GPT Error:", e)
         return "Sorry, something went wrong."
 
-# === Send message to Facebook Messenger ===
+# === Send Message to Facebook User ===
 def send_message(recipient_id, text):
     url = 'https://graph.facebook.com/v17.0/me/messages'
     params = {'access_token': PAGE_ACCESS_TOKEN}
@@ -62,6 +63,6 @@ def send_message(recipient_id, text):
     }
     requests.post(url, params=params, headers=headers, json=data)
 
-# === Render auto-detects this ===
+# === Entry Point ===
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
