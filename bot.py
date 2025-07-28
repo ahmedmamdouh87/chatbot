@@ -1,72 +1,88 @@
-from flask import Flask, request
-import requests
 import os
-from dotenv import load_dotenv
 import openai
-
-# Load environment variables (only used locally)
-load_dotenv()
+import requests
+from flask import Flask, request
 
 app = Flask(__name__)
 
-VERIFY_TOKEN = os.environ.get("FB_VERIFY_TOKEN", "test123")
-PAGE_ACCESS_TOKEN = os.environ.get("FB_PAGE_TOKEN")
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+# Load your secrets
+PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN")
+VERIFY_TOKEN = os.getenv("VERIFY_TOKEN")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-# Set OpenAI API key
+# Confirm all required keys exist
+print("API Key Exists:", OPENAI_API_KEY is not None)
+print("Page Token Exists:", PAGE_ACCESS_TOKEN is not None)
+
 openai.api_key = OPENAI_API_KEY
-print("API Key Exists:", openai.api_key is not None)
 
-# Facebook webhook verification
-@app.route('/webhook', methods=['GET'])
-def verify():
-    if request.args.get('hub.verify_token') == VERIFY_TOKEN:
-        return request.args.get('hub.challenge')
-    return 'Invalid verification token', 403
 
-# Handle messages from Facebook
-@app.route('/webhook', methods=['POST'])
-def webhook():
-    data = request.get_json()
+def get_chatgpt_response(user_message):
+    print("=== Sending to OpenAI ===")
+    print("User message:", user_message)
 
-    if data.get('object') == 'page':
-        for entry in data['entry']:
-            for event in entry.get('messaging', []):
-                sender_id = event['sender']['id']
-                if 'message' in event and 'text' in event['message']:
-                    user_message = event['message']['text']
-                    gpt_reply = get_gpt_reply(user_message)
-                    send_message(sender_id, gpt_reply)
-    return "ok", 200
-
-# Function to get ChatGPT reply
-def get_gpt_reply(user_message):
     try:
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "You are a helpful assistant."},
-                {"role": "user", "content": user_message}
-            ]
+            messages=[{"role": "user", "content": user_message}]
         )
-        return response.choices[0].message['content'].strip()
+        print("=== OpenAI Response ===")
+        print(response)
+
+        reply = response['choices'][0]['message']['content']
+        return reply.strip()
     except Exception as e:
-        print(f"OpenAI error: {e}")
-        return "Sorry, something went wrong."
+        print("OpenAI Error:", e)
+        return "Something went wrong while talking to ChatGPT."
 
-# Function to send message back to Facebook user
-def send_message(recipient_id, text):
-    url = 'https://graph.facebook.com/v17.0/me/messages'
-    params = {'access_token': PAGE_ACCESS_TOKEN}
-    headers = {'Content-Type': 'application/json'}
+
+def send_message(recipient_id, message_text):
+    print(f"=== Sending message to Facebook ===\nRecipient: {recipient_id}\nMessage: {message_text}")
+    params = {"access_token": PAGE_ACCESS_TOKEN}
+    headers = {"Content-Type": "application/json"}
     data = {
-        'recipient': {'id': recipient_id},
-        'message': {'text': text}
+        "recipient": {"id": recipient_id},
+        "message": {"text": message_text}
     }
-    response = requests.post(url, params=params, headers=headers, json=data)
-    if response.status_code != 200:
-        print(f"Error sending message: {response.text}")
 
-# Run Flask app
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+    r = requests.post("https://graph.facebook.com/v17.0/me/messages", params=params, headers=headers, json=data)
+    print("Facebook Response:", r.status_code, r.text)
+
+
+@app.route('/', methods=['GET'])
+def home():
+    return 'Facebook Messenger bot is running!'
+
+
+@app.route('/webhook', methods=['GET'])
+def verify():
+    token = request.args.get("hub.verify_token")
+    challenge = request.args.get("hub.challenge")
+    print("=== Webhook verification attempt ===")
+    if token == VERIFY_TOKEN:
+        print("Verification successful")
+        return challenge
+    print("Verification failed")
+    return "Invalid verification token"
+
+
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    data = request.get_json()
+    print("=== Incoming Facebook Webhook Data ===")
+    print(data)
+
+    if data['object'] == 'page':
+        for entry in data['entry']:
+            for messaging_event in entry.get('messaging', []):
+                sender_id = messaging_event['sender']['id']
+                if 'message' in messaging_event and 'text' in messaging_event['message']:
+                    message_text = messaging_event['message']['text']
+                    print(f"Received message from {sender_id}: {message_text}")
+                    reply_text = get_chatgpt_response(message_text)
+                    send_message(sender_id, reply_text)
+    return "OK", 200
+
+
+if __name__ == "__main__":
+    app.run(debug=False, host="0.0.0.0", port=5000)
